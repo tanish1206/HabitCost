@@ -1,13 +1,42 @@
-import { useMemo } from "react";
-import { TrendingDown, TrendingUp, Wallet, Flame } from "lucide-react";
+import { useState, useMemo } from "react";
+import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
+import QuickAddFAB from "@/components/QuickAddFAB";
+import { fetchTransactions } from "@/services/bankSyncService";
 import {
-  MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES, HABIT_APPS,
-  getAppById, getAppMonthlyTotal, getMonthlyTotal, formatCurrency,
+  MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES,
+  getAppById, getMonthlyTotal, formatCurrency,
 } from "@/lib/data";
 import AppSpendCard from "@/components/AppSpendCard";
 
 export default function Dashboard() {
-  const expenses = MOCK_EXPENSES;
+  const [expenses, setExpenses] = useState(MOCK_EXPENSES);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+
+  const handleManualAdd = (newExpense: any) => {
+    setExpenses(prev => [newExpense, ...prev]);
+  };
+
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      const newTransactions = await fetchTransactions();
+      setExpenses(prev => {
+        // Simple de-duplication based on ID
+        const newIds = new Set(newTransactions.map((t: any) => t.id));
+        const filteredPrev = prev.filter(p => !newIds.has(p.id));
+        return [...newTransactions, ...filteredPrev];
+      });
+      setLastSynced(new Date());
+      toast.success(`Synced ${newTransactions.length} new transactions`);
+    } catch (error) {
+      toast.error("Failed to sync transactions");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const totalThisMonth = useMemo(() => getMonthlyTotal(expenses, "2026-02"), [expenses]);
   const totalLastMonth = useMemo(() => getMonthlyTotal(expenses, "2026-01"), [expenses]);
 
@@ -30,9 +59,26 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <header className="px-5 pt-12 pb-6">
-        <p className="text-sm text-muted-foreground">Good evening</p>
-        <h1 className="text-2xl font-bold mt-1">Your Spending</h1>
+      <header className="px-5 pt-12 pb-6 flex justify-between items-end">
+        <div>
+          <p className="text-sm text-muted-foreground">Good evening</p>
+          <h1 className="text-2xl font-bold mt-1">Your Spending</h1>
+        </div>
+        <div className="text-right">
+          <button
+            onClick={handleSync}
+            disabled={isSyncing}
+            className="flex items-center gap-2 text-xs font-medium text-primary hover:opacity-80 transition-opacity"
+          >
+            <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Syncing..." : "Sync Now"}
+          </button>
+          {lastSynced && (
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Synced: {lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
       </header>
 
       {/* Total Spend Card */}
@@ -115,6 +161,8 @@ export default function Dashboard() {
           })}
         </div>
       </section>
+
+      <QuickAddFAB onAddExpense={handleManualAdd} />
     </div>
   );
 }
