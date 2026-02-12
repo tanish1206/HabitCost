@@ -25,6 +25,7 @@ export interface NormalizedExpense {
     isFlagged?: boolean; // If high spend
 }
 
+
 export interface SyncStats {
     newTransactionsCount: number;
     totalProcessed: number;
@@ -34,4 +35,11 @@ export interface SyncStats {
         email: number;
     };
     lastSyncedAt: string;
+}
+
+export interface SyncHistoryItem {
+    id: string;
+    timestamp: string;
+    stats: SyncStats;
+    status: "success" | "failed";
 }

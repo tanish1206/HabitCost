@@ -1,9 +1,9 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, PlusCircle, Target, Flame, BarChart3, TrendingUp, Bell } from "lucide-react";
+import { LayoutDashboard, Target, Flame, BarChart3, TrendingUp, Bell } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/add", icon: PlusCircle, label: "Add" },
+
   { to: "/goals", icon: Target, label: "Goals" },
   { to: "/challenges", icon: Flame, label: "Challenges" },
   { to: "/analytics", icon: BarChart3, label: "Analytics" },
@@ -21,9 +21,8 @@ export default function BottomNav() {
             <NavLink
               key={to}
               to={to}
-              className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium transition-colors ${
-                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium transition-colors ${active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               <Icon className={`h-5 w-5 ${active ? "drop-shadow-[0_0_6px_hsl(15_90%_58%/0.5)]" : ""}`} />
               {label}

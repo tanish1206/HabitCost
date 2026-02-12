@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import BottomNav from "@/components/BottomNav";
 import Index from "./pages/Index";
-import AddExpense from "./pages/AddExpense";
+
 import Goals from "./pages/Goals";
 import Challenges from "./pages/Challenges";
 import Analytics from "./pages/Analytics";
@@ -23,7 +23,7 @@ const App = () => (
         <div className="mx-auto max-w-lg min-h-screen">
           <Routes>
             <Route path="/" element={<Index />} />
-            <Route path="/add" element={<AddExpense />} />
+
             <Route path="/goals" element={<Goals />} />
             <Route path="/challenges" element={<Challenges />} />
             <Route path="/analytics" element={<Analytics />} />

@@ -2,14 +2,17 @@
 // TODO: Add webhook support for real-time updates
 import { RawTransaction } from "./types";
 
-const MOCK_BANK_DATA = [
-    { description: "SWIGGY INSTAMART", amount: 450 },
-    { description: "ZOMATO ONLINE ORDER", amount: 320 },
-    { description: "UBER TRIP", amount: 180 },
-    { description: "AMAZON PAY INDIA", amount: 1499 },
-    { description: "NETFLIX.COM", amount: 649 },
-    { description: "STARBUCKS IND", amount: 350 },
-    { description: "SPOTIFY PREMIUM", amount: 119 },
+const BANK_DESCRIPTIONS = [
+    "SWIGGY INSTAMART",
+    "ZOMATO MEDIA",
+    "UBER INDIA",
+    "AMAZON PAY",
+    "NETFLIX.COM",
+    "HDFC CREDIT CARD PAYMENT",
+    "STARBUCKS COFFEE",
+    "SPOTIFY AB",
+    "BLINKIT GROCERY",
+    "AIRTEL PAYMENT"
 ];
 
 export async function fetchBankTransactions(): Promise<RawTransaction[]> {
@@ -21,16 +24,21 @@ export async function fetchBankTransactions(): Promise<RawTransaction[]> {
     const transactions: RawTransaction[] = [];
 
     for (let i = 0; i < count; i++) {
-        const template = MOCK_BANK_DATA[Math.floor(Math.random() * MOCK_BANK_DATA.length)];
-        // Add some variance to amount
-        const variance = Math.floor(Math.random() * 50) - 25;
+        const description = BANK_DESCRIPTIONS[Math.floor(Math.random() * BANK_DESCRIPTIONS.length)];
+        // Random amount between 50 and 2000
+        const amount = Math.floor(Math.random() * 1950) + 50;
+
+        // Date within last 60 days
+        const pastDays = Math.floor(Math.random() * 60);
+        const date = new Date();
+        date.setDate(date.getDate() - pastDays);
 
         transactions.push({
             id: `bank_${Date.now()}_${i}`,
-            description: template.description,
-            amount: template.amount + variance,
-            date: new Date().toISOString(),
-            type: "debit",
+            description,
+            amount,
+            date: date.toISOString(),
+            type: "debit", // Only debits for now
             accountId: "acc_hdfc_123",
             source: "bank"
         });

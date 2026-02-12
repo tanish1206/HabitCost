@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import QuickAddFAB from "@/components/QuickAddFAB";
-import { runFullSync } from "@/services/automation/syncEngine";
+import { runFullSync, getSyncHistory } from "@/services/automation/syncEngine";
+import { SyncHistoryItem } from "@/services/automation/types";
 import {
   MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES,
   getAppById, getMonthlyTotal, formatCurrency,
@@ -10,13 +10,16 @@ import {
 import AppSpendCard from "@/components/AppSpendCard";
 
 export default function Dashboard() {
-  const [expenses, setExpenses] = useState(MOCK_EXPENSES);
+  const [expenses, setExpenses] = useState(() => {
+    const saved = localStorage.getItem("habitCost_expenses");
+    return saved ? JSON.parse(saved) : MOCK_EXPENSES;
+  });
+  const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<Date | null>(null);
-
-  const handleManualAdd = (newExpense: any) => {
-    setExpenses(prev => [newExpense, ...prev]);
-  };
+  const [lastSynced, setLastSynced] = useState<Date | null>(() => {
+    const saved = localStorage.getItem("habitCost_lastSynced");
+    return saved ? new Date(saved) : null;
+  });
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -28,17 +31,19 @@ export default function Dashboard() {
         // Simple de-duplication based on ID
         const newIds = new Set(newTransactions.map((t) => t.id));
         const filteredPrev = prev.filter(p => !newIds.has(p.id));
-        return [...newTransactions, ...filteredPrev];
+        const updated = [...newTransactions, ...filteredPrev];
+        localStorage.setItem("habitCost_expenses", JSON.stringify(updated));
+        return updated;
       });
-      setLastSynced(new Date());
+      const now = new Date();
+      setLastSynced(now);
+      localStorage.setItem("habitCost_lastSynced", now.toISOString());
+      setSyncHistory(getSyncHistory());
 
       toast.success(
         `Synced: ${syncResult.stats.sources.bank} Bank, ${syncResult.stats.sources.sms} SMS, ${syncResult.stats.sources.email} Email`,
         { duration: 4000 }
       );
-
-      // TODO: Trigger alerts if daily challenge limit exceeded
-      // TODO: Check if spending spike > 25% from last 30 days
 
     } catch (error) {
       toast.error("Failed to sync transactions");
@@ -47,6 +52,13 @@ export default function Dashboard() {
       setIsSyncing(false);
     }
   };
+
+  // Auto-sync on load if no recent sync
+  useEffect(() => {
+    if (!lastSynced) {
+      handleSync();
+    }
+  }, []);
 
   const totalThisMonth = useMemo(() => getMonthlyTotal(expenses, "2026-02"), [expenses]);
   const totalLastMonth = useMemo(() => getMonthlyTotal(expenses, "2026-01"), [expenses]);
@@ -84,11 +96,15 @@ export default function Dashboard() {
             <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
             {isSyncing ? "Syncing..." : "Sync Now"}
           </button>
-          {lastSynced && (
-            <p className="text-[10px] text-muted-foreground mt-1">
-              Synced: {lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
+
+          {/* Recent Sync Log */}
+          <div className="mt-2 flex flex-col items-end gap-1">
+            {syncHistory.slice(0, 2).map(h => (
+              <p key={h.id} className="text-[9px] text-muted-foreground">
+                {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: +{h.stats.newTransactionsCount} txns
+              </p>
+            ))}
+          </div>
         </div>
       </header>
 
@@ -172,8 +188,6 @@ export default function Dashboard() {
           })}
         </div>
       </section>
-
-      <QuickAddFAB onAddExpense={handleManualAdd} />
     </div>
   );
 }
