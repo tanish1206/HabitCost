@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { runFullSync, getSyncHistory } from "@/services/automation/syncEngine";
-import { SyncHistoryItem } from "@/services/automation/types";
+
 import {
   MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES,
   getAppById, getMonthlyTotal, formatCurrency, HABIT_APPS
@@ -10,66 +9,32 @@ import {
 import AppSpendCard from "@/components/AppSpendCard";
 import TrackedAppsManager from "@/components/TrackedAppsManager";
 
+import { useHabitStore } from "@/store/useHabitStore";
+
 export default function Dashboard() {
-  const [expenses, setExpenses] = useState(() => {
-    const saved = localStorage.getItem("habitCost_expenses");
-    return saved ? JSON.parse(saved) : MOCK_EXPENSES;
-  });
-  const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSynced, setLastSynced] = useState<Date | null>(() => {
-    const saved = localStorage.getItem("habitCost_lastSynced");
-    return saved ? new Date(saved) : null;
-  });
+  const {
+    expenses,
+    syncHistory,
+    lastSynced,
+    isSyncing,
+    runSync
+  } = useHabitStore();
 
+  // Local state for UI toggle only (tracked apps manager modal)
   const [showAppManager, setShowAppManager] = useState(false);
-  const [trackedAppIds, setTrackedAppIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem("habitCost_trackedApps");
-    return saved ? JSON.parse(saved) : HABIT_APPS.map(a => a.id);
-  });
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      const syncResult = await runFullSync();
-      const newTransactions = syncResult.expenses;
-
-      setExpenses(prev => {
-        // Simple de-duplication based on ID
-        const newIds = new Set(newTransactions.map((t) => t.id));
-        const filteredPrev = prev.filter(p => !newIds.has(p.id));
-        const updated = [...newTransactions, ...filteredPrev];
-        localStorage.setItem("habitCost_expenses", JSON.stringify(updated));
-        return updated;
-      });
-      const now = new Date();
-      setLastSynced(now);
-      localStorage.setItem("habitCost_lastSynced", now.toISOString());
-      setSyncHistory(getSyncHistory());
-
-      toast.success(
-        `Synced: ${syncResult.stats.sources.bank} Bank, ${syncResult.stats.sources.sms} SMS, ${syncResult.stats.sources.email} Email`,
-        { duration: 4000 }
-      );
-
-    } catch (error) {
-      toast.error("Failed to sync transactions");
-      console.error(error);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   // Auto-sync on load if no recent sync
   useEffect(() => {
     if (!lastSynced) {
-      handleSync();
+      runSync();
     }
   }, []);
 
+  const { selectedApps } = useHabitStore();
+
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => trackedAppIds.includes(e.appId));
-  }, [expenses, trackedAppIds]);
+    return expenses.filter(e => selectedApps.includes(e.appId));
+  }, [expenses, selectedApps]);
 
   const totalThisMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-02"), [filteredExpenses]);
   const totalLastMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-01"), [filteredExpenses]);
@@ -100,7 +65,7 @@ export default function Dashboard() {
         </div>
         <div className="text-right">
           <button
-            onClick={handleSync}
+            onClick={runSync}
             disabled={isSyncing}
             className="flex items-center gap-2 text-xs font-medium text-primary hover:opacity-80 transition-opacity"
           >
@@ -132,7 +97,6 @@ export default function Dashboard() {
       <TrackedAppsManager
         open={showAppManager}
         onOpenChange={setShowAppManager}
-        onTrackedAppsChange={setTrackedAppIds}
       />
 
 

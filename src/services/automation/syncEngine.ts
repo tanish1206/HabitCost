@@ -2,18 +2,11 @@ import { fetchBankTransactions } from "./bankAggregatorService";
 import { fetchSmsTransactions } from "./smsParserService";
 import { parseEmailReceipts } from "./emailReceiptParser";
 import { normalizeTransactions } from "./transactionNormalizer";
-import { SyncStats, NormalizedExpense, SyncHistoryItem } from "./types";
+import { SyncStats, NormalizedExpense } from "./types";
 
 export interface SyncResult {
     stats: SyncStats;
     expenses: NormalizedExpense[];
-}
-
-// In-memory history for demo purposes (would be in DB/Store)
-let syncHistory: SyncHistoryItem[] = [];
-
-export function getSyncHistory(): SyncHistoryItem[] {
-    return syncHistory;
 }
 
 export async function runFullSync(): Promise<SyncResult> {
@@ -32,35 +25,16 @@ export async function runFullSync(): Promise<SyncResult> {
         const normalizedSms = normalizeTransactions(smsTxns);
         const normalizedEmail = normalizeTransactions(emailTxns);
 
-        // 3. Combine
+        // 3. Combine All (No filtering yet)
         const allExpenses = [
             ...normalizedBank,
             ...normalizedSms,
             ...normalizedEmail
         ];
 
-        // Filter by tracked apps (if set)
-        const trackedAppsJson = localStorage.getItem("habitCost_trackedApps");
-        let filteredExpenses = allExpenses;
-        if (trackedAppsJson) {
-            const trackedIds: string[] = JSON.parse(trackedAppsJson);
-            filteredExpenses = allExpenses.filter(e => trackedIds.includes(e.appId));
-        }
-
-        // 4. Deduplication Logic (Mock ID based)
-        // We deduplicate within the current batch
-        const uniqueExpensesMap = new Map<string, NormalizedExpense>();
-        filteredExpenses.forEach(item => {
-            if (!uniqueExpensesMap.has(item.id)) {
-                uniqueExpensesMap.set(item.id, item);
-            }
-        });
-
-        const uniqueExpenses = Array.from(uniqueExpensesMap.values());
-
-        // 5. Generate Stats
+        // 4. Generate Stats (Raw counts from sources)
         const stats: SyncStats = {
-            newTransactionsCount: uniqueExpenses.length,
+            newTransactionsCount: allExpenses.length, // Total found, not necessarily new to store
             totalProcessed: bankTxns.length + smsTxns.length + emailTxns.length,
             sources: {
                 bank: normalizedBank.length,
@@ -70,36 +44,12 @@ export async function runFullSync(): Promise<SyncResult> {
             lastSyncedAt: timestamp
         };
 
-        // 6. Update History
-        syncHistory.unshift({
-            id: `sync_${Date.now()}`,
-            timestamp,
-            stats,
-            status: "success"
-        });
-
-        // Keep only last 10 entries
-        if (syncHistory.length > 10) {
-            syncHistory = syncHistory.slice(0, 10);
-        }
-
         return {
             stats,
-            expenses: uniqueExpenses
+            expenses: allExpenses
         };
     } catch (error) {
         console.error("Sync failed:", error);
-        syncHistory.unshift({
-            id: `sync_${Date.now()}`,
-            timestamp,
-            stats: {
-                newTransactionsCount: 0,
-                totalProcessed: 0,
-                sources: { bank: 0, sms: 0, email: 0 },
-                lastSyncedAt: timestamp
-            },
-            status: "failed"
-        });
         throw error;
     }
 }

@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { TrendingUp, Search, ArrowRight, ExternalLink } from "lucide-react";
-import { MOCK_EXPENSES, getAppById, formatCurrency, calculateInvestmentGrowth } from "@/lib/data";
+import { getAppById, formatCurrency, calculateInvestmentGrowth } from "@/lib/data";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { MutualFund, searchMutualFunds } from "@/services/investment/mutualFundService";
+import { useHabitStore } from "@/store/useHabitStore";
 
 const SCENARIOS = [
   { name: "Mutual Fund SIP", rate: 12, color: "hsl(15, 90%, 58%)" },
@@ -16,215 +17,184 @@ const SCENARIOS = [
 const YEARS = [1, 3, 5, 10];
 
 export default function InvestmentComparison() {
+  const { expenses } = useHabitStore();
   const [selectedYears, setSelectedYears] = useState(5);
   const [reductionPct, setReductionPct] = useState(30);
-  const [expenses, setExpenses] = useState(MOCK_EXPENSES);
 
   // Fund Explorer State
   const [searchQuery, setSearchQuery] = useState("");
   const [funds, setFunds] = useState<MutualFund[]>([]);
   const [loadingFunds, setLoadingFunds] = useState(false);
 
-  // Load expenses from local storage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("habitCost_expenses");
-    if (saved) {
-      setExpenses(JSON.parse(saved));
-    }
-  }, []);
-
   // Fetch funds on search
   useEffect(() => {
     const fetchFunds = async () => {
       setLoadingFunds(true);
-      try {
-        const results = await searchMutualFunds(searchQuery);
-        setFunds(results);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoadingFunds(false);
-      }
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const results = searchMutualFunds(searchQuery);
+      setFunds(results);
+      setLoadingFunds(false);
     };
+
     const debounce = setTimeout(fetchFunds, 300);
     return () => clearTimeout(debounce);
   }, [searchQuery]);
 
-  const topApps = useMemo(() => {
-    const map = new Map<string, number>();
-    // Filter for current month (mocked as Feb 2026 for now, or dynamic)
-    const currentMonthPrefix = new Date().toISOString().slice(0, 7); // e.g., "2026-02"
 
-    // Fallback to "2026-02" if no data for current month (for demo purposes)
-    const targetMonth = expenses.some(e => e.date.startsWith(currentMonthPrefix)) ? currentMonthPrefix : "2026-02";
+  // 1. Calculate Monthly Average Spend from Actual Data
+  const monthlyAverage = useMemo(() => {
+    if (expenses.length === 0) return 0;
 
-    expenses
-      .filter(e => e.date.startsWith(targetMonth))
-      .forEach(e => map.set(e.appId, (map.get(e.appId) || 0) + e.amount));
+    // Group by month
+    const months = new Set(expenses.map(e => e.date.substring(0, 7))); // YYYY-MM
+    const total = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([appId, monthly]) => ({ app: getAppById(appId)!, monthly }));
+    // Avoid division by zero, default to 1 month if less than a month of data
+    const count = Math.max(months.size, 1);
+
+    return total / count;
   }, [expenses]);
 
-  const totalMonthlySpend = topApps.reduce((s, a) => s + a.monthly, 0);
-  const totalMonthlySavings = totalMonthlySpend * (reductionPct / 100);
+  // 2. Calculate Investable Amount (Opportunity Cost)
+  const investableAmount = (monthlyAverage * reductionPct) / 100;
+
+  // 3. Project Wealth for each scenario
+  const projections = useMemo(() => {
+    return SCENARIOS.map(scenario => ({
+      ...scenario,
+      value: calculateInvestmentGrowth(investableAmount, scenario.rate, selectedYears)
+    }));
+  }, [investableAmount, selectedYears]);
 
   const handleInvestClick = (fundName: string) => {
-    toast.success(`Redirecting to partner to invest in ${fundName}...`);
+    toast.success(`Redirecting to partner to invest in ${fundName}`);
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="px-5 pt-12 pb-6">
-        <h1 className="text-2xl font-bold">Investment View</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Turn your <span className="text-accent font-semibold">{formatCurrency(totalMonthlySpend)}</span> monthly spend into wealth.
+    <div className="min-h-screen bg-background pb-24 px-5 pt-12">
+      <header className="mb-8">
+        <h1 className="text-2xl font-bold">Investment Potential</h1>
+        <p className="text-sm text-muted-foreground">
+          Turn your habit costs into wealth.
         </p>
       </header>
 
-      {/* Reduction Slider */}
-      <div className="px-5 mb-6">
-        <div className="glass-card p-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-sm font-medium">Reduce spending by</span>
-            <span className="text-lg font-bold text-primary">{reductionPct}%</span>
+      {/* Control Card */}
+      <div className="glass-card p-5 mb-6">
+        <div className="mb-6">
+          <div className="flex justify-between mb-2">
+            <label className="text-sm font-medium">If I reduced spending by</label>
+            <span className="font-bold text-primary">{reductionPct}%</span>
           </div>
           <Slider
             value={[reductionPct]}
-            onValueChange={([v]) => setReductionPct(v)}
-            min={10}
-            max={80}
+            onValueChange={(val) => setReductionPct(val[0])}
+            max={50}
             step={5}
+            className="py-2"
           />
-          <p className="text-xs text-muted-foreground">
-            Monthly investable amount: <span className="font-bold text-foreground">{formatCurrency(Math.round(totalMonthlySavings))}</span>
+          <p className="text-xs text-muted-foreground mt-2">
+            That's <span className="text-foreground font-bold">{formatCurrency(investableAmount)}/mo</span> saved from your avg spend of {formatCurrency(monthlyAverage)}.
           </p>
         </div>
-      </div>
 
-      {/* Time Horizon */}
-      <div className="px-5 mb-6">
-        <div className="flex gap-2">
-          {YEARS.map(y => (
-            <button
-              key={y}
-              onClick={() => setSelectedYears(y)}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${selectedYears === y
-                  ? "gradient-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground border border-border"
-                }`}
-            >
-              {y}Y
-            </button>
-          ))}
+        <div>
+          <div className="flex justify-between mb-2">
+            <label className="text-sm font-medium">Invested for</label>
+            <span className="font-bold text-primary">{selectedYears} Years</span>
+          </div>
+          <div className="flex justify-between gap-2 mt-3">
+            {YEARS.map(y => (
+              <button
+                key={y}
+                onClick={() => setSelectedYears(y)}
+                className={`flex-1 py-1.5 text-xs rounded-lg border transition-all ${selectedYears === y
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border hover:bg-accent"
+                  }`}
+              >
+                {y}Y
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Investment Scenarios */}
-      <div className="px-5 mb-6 space-y-3">
-        <h2 className="text-sm font-semibold">Projected Wealth</h2>
-        {SCENARIOS.map(sc => {
-          const projected = calculateInvestmentGrowth(totalMonthlySavings, sc.rate, selectedYears);
-          const totalInvested = totalMonthlySavings * selectedYears * 12;
-          const gains = projected - totalInvested;
-          return (
-            <div key={sc.name} className="glass-card p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-3 w-3 rounded-full" style={{ backgroundColor: sc.color }} />
-                <span className="text-sm font-medium">{sc.name}</span>
-                <span className="text-xs text-muted-foreground ml-auto">{sc.rate}% p.a.</span>
-              </div>
-              <div className="flex justify-between items-end">
-                <p className="text-2xl font-bold" style={{ color: sc.color }}>
-                  {formatCurrency(Math.round(projected))}
-                </p>
-                <p className="text-xs text-accent mb-1">
-                  +{formatCurrency(Math.round(gains))} gains
-                </p>
-              </div>
+      {/* Projection Cards */}
+      <div className="grid gap-4 mb-8">
+        {projections.map(p => (
+          <div key={p.name} className="relative overflow-hidden rounded-xl border border-border bg-card p-4">
+            <div
+              className="absolute top-0 right-0 p-3 opacity-10"
+              style={{ color: p.color }}
+            >
+              <TrendingUp className="h-12 w-12" />
             </div>
-          );
-        })}
+
+            <p className="text-sm text-muted-foreground mb-1">{p.name} ({p.rate}%)</p>
+            <p className="text-2xl font-bold" style={{ color: p.color }}>
+              {formatCurrency(p.value)}
+            </p>
+            <p className="text-xs opacity-70 mt-1">
+              Projected value in {selectedYears} years
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Mutual Fund Explorer */}
-      <section className="px-5 mb-6">
-        <h2 className="text-base font-semibold mb-3">Mutual Fund Explorer</h2>
-        <div className="glass-card p-4 space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search funds (e.g. Nippon, HDFC)"
-              className="pl-9 bg-background/50"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Start Investing</h2>
+          <span className="text-xs text-muted-foreground bg-accent/50 px-2 py-1 rounded">Simulated</span>
+        </div>
 
-          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-            {loadingFunds ? (
-              <p className="text-center text-xs text-muted-foreground py-4">Loading funds...</p>
-            ) : funds.length > 0 ? (
-              funds.map(fund => (
-                <div key={fund.id} className="p-3 rounded-lg border border-border/50 bg-background/30 hover:bg-background/50 transition-colors">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="text-sm font-medium line-clamp-1">{fund.name}</h3>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded">{fund.category}</span>
-                        <span className="text-[10px] bg-destructive/10 text-destructive px-1.5 py-0.5 rounded">{fund.risk} Risk</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-accent font-bold">+{fund.returns["3Y"]}%</p>
-                      <p className="text-[10px] text-muted-foreground">3Y Returns</p>
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search Mutual Funds (e.g. HDFC, Axis)"
+            className="pl-9 bg-card/50"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-3">
+          {loadingFunds ? (
+            <div className="text-center py-4 text-sm text-muted-foreground">Searching...</div>
+          ) : funds.length > 0 ? (
+            funds.map(fund => (
+              <div key={fund.id} className="glass-card p-3 flex flex-col gap-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-semibold text-sm">{fund.name}</p>
+                    <div className="flex gap-2 text-[10px] mt-1">
+                      <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded">{fund.category}</span>
+                      <span className={`px-1.5 py-0.5 rounded ${fund.risk === 'High' ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}`}>{fund.risk} Risk</span>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    className="w-full text-xs h-8 gap-1"
-                    variant="outline"
-                    onClick={() => handleInvestClick(fund.name)}
-                  >
-                    Invest via Partner <ExternalLink className="h-3 w-3" />
-                  </Button>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">3Y Returns</p>
+                    <p className="text-sm font-bold text-green-500">+{fund.returns3Y}%</p>
+                  </div>
                 </div>
-              ))
-            ) : (
-              <p className="text-center text-xs text-muted-foreground py-4">No funds found.</p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Per-App Breakdown */}
-      <section className="px-5 mb-6">
-        <h2 className="text-sm font-semibold mb-3">Your Top Spenders</h2>
-        <div className="space-y-2">
-          {topApps.map(({ app, monthly }) => {
-            const savings = monthly * (reductionPct / 100);
-            const Icon = app.icon;
-            return (
-              <div key={app.id} className="glass-card flex items-center gap-3 p-3">
-                <div
-                  className="flex h-9 w-9 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: app.color + "22", color: app.color }}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-1 h-8 text-xs gap-1"
+                  onClick={() => handleInvestClick(fund.name)}
                 >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{app.name}</p>
-                  <p className="text-xs text-muted-foreground">Spend: {formatCurrency(Math.round(monthly))}/mo</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-primary">{formatCurrency(Math.round(savings))}</p>
-                  <p className="text-[10px] text-muted-foreground">Potential Savings</p>
-                </div>
+                  Invest via Partner <ExternalLink className="h-3 w-3" />
+                </Button>
               </div>
-            );
-          })}
+            ))
+          ) : (
+            <div className="text-center py-6 text-muted-foreground text-sm border-2 border-dashed border-border/50 rounded-xl">
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-20" />
+              <p>Search for funds to verify returns</p>
+            </div>
+          )}
         </div>
       </section>
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Check, Search, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,46 +9,18 @@ import {
     DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area"; // Assume shadcn scroll-area exists or use div
-import { Switch } from "@/components/ui/switch"; // Assume shadcn switch exists
+import { Switch } from "@/components/ui/switch";
 import { HABIT_APPS, HabitApp } from "@/lib/data";
-import { toast } from "sonner";
+import { useHabitStore } from "@/store/useHabitStore";
 
 interface TrackedAppsManagerProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onTrackedAppsChange: (ids: string[]) => void;
 }
 
-export default function TrackedAppsManager({ open, onOpenChange, onTrackedAppsChange }: TrackedAppsManagerProps) {
-    const [trackedIds, setTrackedIds] = useState<string[]>([]);
+export default function TrackedAppsManager({ open, onOpenChange }: TrackedAppsManagerProps) {
+    const { selectedApps, toggleApp } = useHabitStore();
     const [searchQuery, setSearchQuery] = useState("");
-
-    // Load from local storage on mount
-    useEffect(() => {
-        const saved = localStorage.getItem("habitCost_trackedApps");
-        if (saved) {
-            setTrackedIds(JSON.parse(saved));
-        } else {
-            // Default: Track everything for now, or maybe just top 3?
-            // Let's default to ALL to match initial MVP behavior, user can disable.
-            const allIds = HABIT_APPS.map(a => a.id);
-            setTrackedIds(allIds);
-            localStorage.setItem("habitCost_trackedApps", JSON.stringify(allIds));
-        }
-    }, []);
-
-    const toggleApp = (id: string) => {
-        setTrackedIds(prev => {
-            const newIds = prev.includes(id)
-                ? prev.filter(tid => tid !== id)
-                : [...prev, id];
-
-            localStorage.setItem("habitCost_trackedApps", JSON.stringify(newIds));
-            onTrackedAppsChange(newIds);
-            return newIds;
-        });
-    };
 
     const filteredApps = HABIT_APPS.filter(app =>
         app.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -76,7 +48,7 @@ export default function TrackedAppsManager({ open, onOpenChange, onTrackedAppsCh
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
                     {filteredApps.map(app => {
-                        const isTracked = trackedIds.includes(app.id);
+                        const isTracked = selectedApps.includes(app.id);
                         const Icon = app.icon;
                         return (
                             <div key={app.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-card hover:bg-accent/5 transition-colors">
