@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
-import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw } from "lucide-react";
+import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { runFullSync, getSyncHistory } from "@/services/automation/syncEngine";
 import { SyncHistoryItem } from "@/services/automation/types";
 import {
   MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES,
-  getAppById, getMonthlyTotal, formatCurrency,
+  getAppById, getMonthlyTotal, formatCurrency, HABIT_APPS
 } from "@/lib/data";
 import AppSpendCard from "@/components/AppSpendCard";
+import TrackedAppsManager from "@/components/TrackedAppsManager";
 
 export default function Dashboard() {
   const [expenses, setExpenses] = useState(() => {
@@ -19,6 +20,12 @@ export default function Dashboard() {
   const [lastSynced, setLastSynced] = useState<Date | null>(() => {
     const saved = localStorage.getItem("habitCost_lastSynced");
     return saved ? new Date(saved) : null;
+  });
+
+  const [showAppManager, setShowAppManager] = useState(false);
+  const [trackedAppIds, setTrackedAppIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem("habitCost_trackedApps");
+    return saved ? JSON.parse(saved) : HABIT_APPS.map(a => a.id);
   });
 
   const handleSync = async () => {
@@ -60,21 +67,25 @@ export default function Dashboard() {
     }
   }, []);
 
-  const totalThisMonth = useMemo(() => getMonthlyTotal(expenses, "2026-02"), [expenses]);
-  const totalLastMonth = useMemo(() => getMonthlyTotal(expenses, "2026-01"), [expenses]);
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(e => trackedAppIds.includes(e.appId));
+  }, [expenses, trackedAppIds]);
+
+  const totalThisMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-02"), [filteredExpenses]);
+  const totalLastMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-01"), [filteredExpenses]);
 
   const topApps = useMemo(() => {
     const map = new Map<string, number>();
-    expenses
+    filteredExpenses
       .filter(e => e.date.startsWith("2026-02"))
       .forEach(e => map.set(e.appId, (map.get(e.appId) || 0) + e.amount));
     return Array.from(map.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([appId, amount]) => ({ app: getAppById(appId)!, amount }));
-  }, [expenses]);
+  }, [filteredExpenses]);
 
-  const recentExpenses = expenses.slice(0, 5);
+  const recentExpenses = filteredExpenses.slice(0, 5);
 
   const activeGoals = MOCK_GOALS.length;
   const activeChallenges = MOCK_CHALLENGES.filter(c => c.status === "active").length;
@@ -97,6 +108,7 @@ export default function Dashboard() {
             {isSyncing ? "Syncing..." : "Sync Now"}
           </button>
 
+
           {/* Recent Sync Log */}
           <div className="mt-2 flex flex-col items-end gap-1">
             {syncHistory.slice(0, 2).map(h => (
@@ -106,7 +118,23 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
+
+        {/* Add App Button */}
+        <button
+          onClick={() => setShowAppManager(true)}
+          className="absolute top-12 right-5 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:opacity-90 transition-opacity"
+          aria-label="Add App"
+        >
+          <Plus className="h-5 w-5" />
+        </button>
       </header>
+
+      <TrackedAppsManager
+        open={showAppManager}
+        onOpenChange={setShowAppManager}
+        onTrackedAppsChange={setTrackedAppIds}
+      />
+
 
       {/* Total Spend Card */}
       <div className="px-5 mb-6">
@@ -188,6 +216,6 @@ export default function Dashboard() {
           })}
         </div>
       </section>
-    </div>
+    </div >
   );
 }

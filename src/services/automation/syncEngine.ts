@@ -39,10 +39,18 @@ export async function runFullSync(): Promise<SyncResult> {
             ...normalizedEmail
         ];
 
+        // Filter by tracked apps (if set)
+        const trackedAppsJson = localStorage.getItem("habitCost_trackedApps");
+        let filteredExpenses = allExpenses;
+        if (trackedAppsJson) {
+            const trackedIds: string[] = JSON.parse(trackedAppsJson);
+            filteredExpenses = allExpenses.filter(e => trackedIds.includes(e.appId));
+        }
+
         // 4. Deduplication Logic (Mock ID based)
         // We deduplicate within the current batch
         const uniqueExpensesMap = new Map<string, NormalizedExpense>();
-        allExpenses.forEach(item => {
+        filteredExpenses.forEach(item => {
             if (!uniqueExpensesMap.has(item.id)) {
                 uniqueExpensesMap.set(item.id, item);
             }
