@@ -1,14 +1,13 @@
 import { useState, useMemo, useEffect } from "react";
-import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw, Plus } from "lucide-react";
+import { TrendingDown, TrendingUp, Wallet, Flame, RefreshCw, Plus, Trophy, Zap, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   MOCK_EXPENSES, MOCK_GOALS, MOCK_CHALLENGES,
-  getAppById, getMonthlyTotal, formatCurrency, HABIT_APPS
+  getAppById, getMonthlyTotal, formatCurrency, HABIT_APPS, getAppMonthlyTotal
 } from "@/lib/data";
-import AppSpendCard from "@/components/AppSpendCard";
 import TrackedAppsManager from "@/components/TrackedAppsManager";
-
+import BossCard from "@/components/BossCard";
 import { useHabitStore } from "@/store/useHabitStore";
 
 export default function Dashboard() {
@@ -17,81 +16,109 @@ export default function Dashboard() {
     syncHistory,
     lastSynced,
     isSyncing,
-    runSync
+    runSync,
+    userXP,
+    userLevel,
+    streaks,
+    selectedApps,
+    checkAchievements
   } = useHabitStore();
 
-  // Local state for UI toggle only (tracked apps manager modal)
   const [showAppManager, setShowAppManager] = useState(false);
 
-  // Auto-sync on load if no recent sync
+  // Auto-sync
   useEffect(() => {
     if (!lastSynced) {
       runSync();
     }
+    // Check achievements on mount too
+    checkAchievements();
   }, []);
-
-  const { selectedApps } = useHabitStore();
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => selectedApps.includes(e.appId));
   }, [expenses, selectedApps]);
 
-  const totalThisMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-02"), [filteredExpenses]);
-  const totalLastMonth = useMemo(() => getMonthlyTotal(filteredExpenses, "2026-01"), [filteredExpenses]);
+  const currentMonth = "2026-02"; // Mock current month
+  const lastMonth = "2026-01"; // Mock last month
 
-  const topApps = useMemo(() => {
-    const map = new Map<string, number>();
-    filteredExpenses
-      .filter(e => e.date.startsWith("2026-02"))
-      .forEach(e => map.set(e.appId, (map.get(e.appId) || 0) + e.amount));
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([appId, amount]) => ({ app: getAppById(appId)!, amount }));
-  }, [filteredExpenses]);
+  const totalThisMonth = useMemo(() => getMonthlyTotal(filteredExpenses, currentMonth), [filteredExpenses]);
 
-  const recentExpenses = filteredExpenses.slice(0, 5);
+  // XP Progress to next level (Mod 100)
+  const xpProgress = userXP % 100;
 
-  const activeGoals = MOCK_GOALS.length;
-  const activeChallenges = MOCK_CHALLENGES.filter(c => c.status === "active").length;
+  // Boss Data: Sort by highest spend this month
+  const bossData = useMemo(() => {
+    return selectedApps
+      .map(appId => {
+        const app = getAppById(appId);
+        if (!app) return null;
+        return {
+          app,
+          currentSpend: getAppMonthlyTotal(filteredExpenses, appId, currentMonth),
+          lastSpend: getAppMonthlyTotal(filteredExpenses, appId, lastMonth)
+        };
+      })
+      .filter(b => b !== null)
+      .sort((a, b) => b!.currentSpend - a!.currentSpend);
+  }, [selectedApps, filteredExpenses]);
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
-      <header className="px-5 pt-12 pb-6 flex justify-between items-end">
-        <div>
-          <p className="text-sm text-muted-foreground">Good evening</p>
-          <h1 className="text-2xl font-bold mt-1">Your Spending</h1>
+      {/* --- GAMIFIED HUD --- */}
+      <header className="px-5 pt-8 pb-6 bg-gradient-to-b from-primary/10 to-transparent">
+        <div className="flex justify-between items-start mb-6">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-black text-2xl border-4 border-background shadow-xl">
+                {userLevel}
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-background text-black shadow-sm">
+                LVL
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold leading-tight">Habit Slayer</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <div className="h-2 w-24 bg-secondary rounded-full overflow-hidden">
+                  <div className="h-full bg-yellow-400" style={{ width: `${xpProgress}%` }} />
+                </div>
+                <span className="text-[10px] font-mono font-medium opacity-60">{userXP} XP</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowAppManager(true)}
+            className="p-2 bg-secondary/50 rounded-full hover:bg-secondary transition-colors"
+            title="Manage Bosses"
+          >
+            <Plus className="h-5 w-5 opacity-70" />
+          </button>
         </div>
-        <div className="text-right">
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="glass-card p-2 py-3 flex flex-col items-center justify-center gap-1 bg-card/60">
+            <Flame className="h-5 w-5 text-orange-500 fill-orange-500/20" />
+            <span className="font-bold text-lg">{streaks.dailySync}</span>
+            <span className="text-[9px] uppercase tracking-wider opacity-60">Day Streak</span>
+          </div>
           <button
             onClick={runSync}
             disabled={isSyncing}
-            className="flex items-center gap-2 text-xs font-medium text-primary hover:opacity-80 transition-opacity"
+            className="glass-card p-2 py-3 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform bg-primary/10 hover:bg-primary/20 border-primary/20"
           >
-            <RefreshCw className={`h-3 w-3 ${isSyncing ? "animate-spin" : ""}`} />
-            {isSyncing ? "Syncing..." : "Sync Now"}
+            <RefreshCw className={`h-5 w-5 text-primary ${isSyncing ? "animate-spin" : ""}`} />
+            <span className="font-bold text-lg text-primary">{isSyncing ? "..." : "Fight"}</span>
+            <span className="text-[9px] uppercase tracking-wider opacity-60 text-primary">Sync</span>
           </button>
-
-
-          {/* Recent Sync Log */}
-          <div className="mt-2 flex flex-col items-end gap-1">
-            {syncHistory.slice(0, 2).map(h => (
-              <p key={h.id} className="text-[9px] text-muted-foreground">
-                {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}: +{h.stats.newTransactionsCount} txns
-              </p>
-            ))}
+          <div className="glass-card p-2 py-3 flex flex-col items-center justify-center gap-1 bg-card/60">
+            <Trophy className="h-5 w-5 text-yellow-500" />
+            <span className="font-bold text-lg">{formatCurrency(totalThisMonth)}</span>
+            <span className="text-[9px] uppercase tracking-wider opacity-60">Damage Taken</span>
           </div>
         </div>
-
-        {/* Add App Button */}
-        <button
-          onClick={() => setShowAppManager(true)}
-          className="absolute top-12 right-5 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:opacity-90 transition-opacity"
-          aria-label="Add App"
-        >
-          <Plus className="h-5 w-5" />
-        </button>
       </header>
 
       <TrackedAppsManager
@@ -99,87 +126,33 @@ export default function Dashboard() {
         onOpenChange={setShowAppManager}
       />
 
+      {/* --- BATTLEGROUND (Boss Grid) --- */}
+      <section className="px-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold uppercase tracking-widest opacity-60 flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4" />
+            Habit Bosses
+          </h2>
+        </div>
 
-      {/* Total Spend Card */}
-      <div className="px-5 mb-6">
-        <div className="gradient-primary rounded-2xl p-5 text-primary-foreground">
-          <p className="text-sm opacity-80">February 2026</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(totalThisMonth)}</p>
-          <div className="flex items-center gap-1 mt-2 text-sm opacity-80">
-            {totalThisMonth > totalLastMonth ? (
-              <>
-                <TrendingUp className="h-4 w-4" />
-                <span>
-                  {formatCurrency(totalThisMonth - totalLastMonth)} more than Jan
-                </span>
-              </>
-            ) : (
-              <>
-                <TrendingDown className="h-4 w-4" />
-                <span>
-                  {formatCurrency(totalLastMonth - totalThisMonth)} less than Jan
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="px-5 mb-6 grid grid-cols-3 gap-3">
-        <div className="glass-card p-3 text-center">
-          <Wallet className="h-5 w-5 mx-auto text-primary mb-1" />
-          <p className="text-lg font-bold">{topApps.length}</p>
-          <p className="text-[10px] text-muted-foreground">Apps Tracked</p>
-        </div>
-        <div className="glass-card p-3 text-center">
-          <Flame className="h-5 w-5 mx-auto text-warning mb-1" />
-          <p className="text-lg font-bold">{activeChallenges}</p>
-          <p className="text-[10px] text-muted-foreground">Challenges</p>
-        </div>
-        <div className="glass-card p-3 text-center">
-          <TrendingDown className="h-5 w-5 mx-auto text-accent mb-1" />
-          <p className="text-lg font-bold">{activeGoals}</p>
-          <p className="text-[10px] text-muted-foreground">Goals Active</p>
-        </div>
-      </div>
-
-      {/* Top Spending Apps */}
-      <section className="px-5 mb-6">
-        <h2 className="text-base font-semibold mb-3">Top Spending Apps</h2>
-        <div className="space-y-2">
-          {topApps.map(({ app, amount }) => (
-            <AppSpendCard key={app.id} app={app} amount={amount} />
+        <div className="space-y-3">
+          {bossData.map((data) => (
+            data && <BossCard
+              key={data.app.id}
+              app={data.app}
+              currentMonthSpend={data.currentSpend}
+              lastMonthSpend={data.lastSpend || 1000} // Default boss HP
+            />
           ))}
-        </div>
-      </section>
 
-      {/* Recent Expenses */}
-      <section className="px-5 mb-6">
-        <h2 className="text-base font-semibold mb-3">Recent Expenses</h2>
-        <div className="space-y-2">
-          {recentExpenses.map(exp => {
-            const app = getAppById(exp.appId);
-            if (!app) return null;
-            const Icon = app.icon;
-            return (
-              <div key={exp.id} className="glass-card flex items-center gap-3 p-3">
-                <div
-                  className="flex h-9 w-9 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: app.color + "22", color: app.color }}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{app.name}</p>
-                  <p className="text-xs text-muted-foreground">{exp.note || exp.date}</p>
-                </div>
-                <p className="text-sm font-semibold">-{formatCurrency(exp.amount)}</p>
-              </div>
-            );
-          })}
+          {bossData.length === 0 && (
+            <div className="text-center py-10 opacity-50 border-2 border-dashed border-border rounded-xl">
+              <p>No Bosses Selected</p>
+              <p className="text-xs mt-1">Tap + to add habits to fight</p>
+            </div>
+          )}
         </div>
       </section>
-    </div >
+    </div>
   );
 }

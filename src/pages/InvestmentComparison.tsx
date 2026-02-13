@@ -81,7 +81,23 @@ export default function InvestmentComparison() {
       </header>
 
       {/* Control Card */}
-      <div className="glass-card p-5 mb-6">
+      <div className="glass-card p-5 mb-6 relative overflow-hidden">
+        {/* GAMIFICATION: Lost Wealth Meter */}
+        <div className="mb-6 p-4 bg-destructive/5 rounded-xl border border-destructive/20 text-center">
+          <p className="text-[10px] uppercase font-bold text-destructive tracking-widest mb-1">☠️ Damage Report</p>
+          <p className="text-sm text-muted-foreground">You fed your habits</p>
+          <p className="text-2xl font-black text-destructive my-1">{formatCurrency(monthlyAverage * 12)}</p>
+          <p className="text-xs text-muted-foreground">this year.</p>
+
+          <div className="mt-3 pt-3 border-t border-destructive/10">
+            <p className="text-xs font-medium mb-1">If invested, this could be</p>
+            <p className="text-xl font-bold text-green-500 animate-pulse">
+              {formatCurrency(calculateInvestmentGrowth(monthlyAverage, 12, 10))}
+            </p>
+            <p className="text-[10px] text-muted-foreground">in 10 years @ 12%</p>
+          </div>
+        </div>
+
         <div className="mb-6">
           <div className="flex justify-between mb-2">
             <label className="text-sm font-medium">If I reduced spending by</label>
@@ -110,8 +126,8 @@ export default function InvestmentComparison() {
                 key={y}
                 onClick={() => setSelectedYears(y)}
                 className={`flex-1 py-1.5 text-xs rounded-lg border transition-all ${selectedYears === y
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "border-border hover:bg-accent"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border hover:bg-accent"
                   }`}
               >
                 {y}Y
